@@ -1,0 +1,19 @@
+N:
+  n_estimators: 150
+  max_depth: 7
+  lr: 0.1
+
+P:
+  n_estimators: 150
+  max_depth: 7
+  lr: 0.1
+
+K:
+  n_estimators: 150
+  max_depth: 7
+  lr: 0.1
+
+pH:
+  n_estimators: 150
+  max_depth: 7
+  lr: 0.1
