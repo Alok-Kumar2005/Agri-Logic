@@ -51,4 +51,5 @@ if __name__ == "__main__":
     ## loading Punjab data
     data_ingestion = DataIngestion("1nDPRHXi2iNPV8QSJRSm7caGN7itasFL5", "data/raw/punjab_soil_samples.csv")
     df = data_ingestion.download_data()
+    df = df.rename(columns= {"K_proxy": "K", "P_proxy": "P"})
     data_ingestion.save_data(df, "data/raw/punjab_soil_samples.csv")
