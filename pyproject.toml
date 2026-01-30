@@ -3,12 +3,15 @@ name = "agri-logic"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
+    "dagshub>=0.6.5",
     "gdown>=5.2.1",
-    "matplotlib>=3.10.8",
-    "numpy>=2.4.1",
-    "pandas>=3.0.0",
-    "scikit-learn>=1.8.0",
+    "matplotlib>=3.8.4",
+    "mlflow>=2.22.4",
+    "numpy>=1.26.4",
+    "pandas>=2.1.4",
+    "scikit-learn>=1.5.2",
     "seaborn>=0.13.2",
+    "xgboost>=2.0.3",
 ]
