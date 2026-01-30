@@ -17,3 +17,23 @@ pH:
   n_estimators: 150
   max_depth: 7
   lr: 0.1
+
+N_FT:
+  n_estimators: 100
+  max_depth: 5
+  lr: 0.01
+
+P_FT:
+  n_estimators: 100
+  max_depth: 5
+  lr: 0.01
+
+K_FT:
+  n_estimators: 100
+  max_depth: 5
+  lr: 0.01
+
+pH_FT:
+  n_estimators: 100
+  max_depth: 5
+  lr: 0.01
