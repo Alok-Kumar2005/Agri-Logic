@@ -1,9 +1,11 @@
 pandas
 numpy
 scikit-learn
-matplotlib
-seaborn
+# matplotlib
+# seaborn
 gdown
 # mlflow
 # dagshub
 xgboost
+earthengine-api
+geemap
