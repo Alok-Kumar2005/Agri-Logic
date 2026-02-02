@@ -33,3 +33,6 @@ cfgrib
 cdsapi
 scipy
 python-dotenv
+python-multipart
+pydantic
+pydantic-settings
