@@ -14,14 +14,22 @@ class FacilitiesService:
     
     def _load_data(self):
         try:
-            # Load air releases
+            # Load air releases with dtype specification to avoid warnings
             if settings.INDUSTRIAL_AIR_RELEASES_PATH.exists():
-                self.air_releases_df = pd.read_csv(settings.INDUSTRIAL_AIR_RELEASES_PATH)
+                self.air_releases_df = pd.read_csv(
+                    settings.INDUSTRIAL_AIR_RELEASES_PATH,
+                    low_memory=False,
+                    dtype={'confidentialityReason': str}  # Column 15 that has mixed types
+                )
                 logger.info(f"Loaded {len(self.air_releases_df)} air release records")
             
-            # Load water releases
+            # Load water releases with dtype specification
             if settings.INDUSTRIAL_WATER_RELEASES_PATH.exists():
-                self.water_releases_df = pd.read_csv(settings.INDUSTRIAL_WATER_RELEASES_PATH)
+                self.water_releases_df = pd.read_csv(
+                    settings.INDUSTRIAL_WATER_RELEASES_PATH,
+                    low_memory=False,
+                    dtype={'confidentialityReason': str}  # Column 15 that has mixed types
+                )
                 logger.info(f"Loaded {len(self.water_releases_df)} water release records")
                 
         except Exception as e:

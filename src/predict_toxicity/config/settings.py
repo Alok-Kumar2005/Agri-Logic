@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/toxicity_db"
     
-    # Data Paths
-    BASE_DIR: Path = Path(__file__).parent.parent
+    # Data Paths - FIX: Navigate from config/ -> predict_toxicity/ -> src/ -> project_root/
+    BASE_DIR: Path = Path(__file__).parent.parent.parent.parent
     DATA_DIR: Path = BASE_DIR / "data"
     RAW_DATA_DIR: Path = DATA_DIR / "raw"
     PROCESSED_DATA_DIR: Path = DATA_DIR / "processed"

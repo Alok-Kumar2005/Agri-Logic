@@ -45,34 +45,64 @@ class DispersionService:
         try:
             # Emission rate calculation based on calamity type
             if calamity_type == "fire":
-                emission_rate = magnitude * 10  # kg/s
+                # Fire: continuous release over hours
+                emission_rate = magnitude * 0.5  # kg/s (slower burn)
                 duration_hours = 4
+                effective_height = release_height + 50  # Buoyant plume rise
             elif calamity_type == "explosion":
-                emission_rate = magnitude * 100  # kg/s
+                # Explosion: instantaneous/rapid release
+                # For explosions, use TNT equivalency for blast radius
+                # Then model atmospheric dispersion of debris/toxins
+                
+                # Initial blast effects (mechanical damage)
+                blast_radius_km = self._calculate_blast_radius(magnitude)
+                
+                # Atmospheric dispersion of explosion products
+                emission_rate = magnitude * 0.1  # kg/s (rapid but not instant for modeling)
                 duration_hours = 0.5
+                effective_height = release_height + 100  # Mushroom cloud effect
             else:
-                emission_rate = magnitude
+                emission_rate = magnitude * 0.01
                 duration_hours = 1
+                effective_height = release_height
             
-            # Calculate maximum downwind distance where concentration exceeds threshold
-            max_distance_km = self._calculate_max_distance(
-                emission_rate,
-                wind_speed,
-                stability_class,
-                release_height
-            )
+            # For explosions, use blast radius as minimum critical radius
+            if calamity_type == "explosion":
+                # Calculate atmospheric dispersion radius
+                dispersion_radius = self._calculate_max_distance(
+                    emission_rate,
+                    wind_speed,
+                    stability_class,
+                    effective_height,
+                    threshold_mg_m3=10.0  # Lower threshold for explosions
+                )
+                
+                # Critical radius is the maximum of blast and dispersion
+                max_distance_km = max(blast_radius_km, dispersion_radius)
+            else:
+                max_distance_km = self._calculate_max_distance(
+                    emission_rate,
+                    wind_speed,
+                    stability_class,
+                    effective_height
+                )
             
             # Calculate concentration at various distances
-            distances = [0.5, 1.0, 2.0, 5.0, 10.0]
+            distances = [0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0]
+            # Filter distances to only those within max_distance
+            relevant_distances = [d for d in distances if d <= max_distance_km]
+            if not relevant_distances:
+                relevant_distances = [0.1, 0.5, 1.0]
+            
             concentrations = []
             
-            for dist_km in distances:
+            for dist_km in relevant_distances:
                 conc = self._gaussian_plume_concentration(
                     emission_rate,
                     dist_km * 1000,  # convert to meters
                     wind_speed,
                     stability_class,
-                    release_height,
+                    effective_height,
                     0  # ground level
                 )
                 concentrations.append({
@@ -80,17 +110,27 @@ class DispersionService:
                     "concentration_mg_m3": round(conc, 4)
                 })
             
-            # Calculate affected area (approximate)
-            plume_width_factor = 0.3  # plume width as fraction of length
+            # Calculate affected area
+            if calamity_type == "explosion":
+                # Elliptical plume shape for explosions
+                plume_width_factor = 0.5
+            else:
+                # Narrower plume for fires
+                plume_width_factor = 0.3
+                
             affected_area_km2 = max_distance_km * max_distance_km * plume_width_factor
+            
+            # Total release amount
+            total_release_kg = emission_rate * duration_hours * 3600
             
             return {
                 "calamity_type": calamity_type,
                 "emission_rate_kg_s": emission_rate,
                 "duration_hours": duration_hours,
-                "total_release_kg": emission_rate * duration_hours * 3600,
-                "max_distance_km": max_distance_km,
-                "affected_area_km2": affected_area_km2,
+                "total_release_kg": total_release_kg,
+                "max_distance_km": round(max_distance_km, 2),
+                "affected_area_km2": round(affected_area_km2, 2),
+                "effective_release_height_m": effective_height,
                 "concentrations": concentrations,
                 "wind_speed_ms": wind_speed,
                 "wind_direction_deg": wind_direction,
@@ -100,10 +140,46 @@ class DispersionService:
             
         except Exception as e:
             logger.error(f"Dispersion simulation failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {
                 "error": str(e),
                 "status": "failed"
             }
+    
+    def _calculate_blast_radius(self, tnt_equivalent_kg: float) -> float:
+        """
+        Calculate blast damage radius from TNT equivalent
+        
+        Uses scaled distance approach:
+        R = W^(1/3) * K
+        
+        Where:
+        - R is radius in meters
+        - W is TNT equivalent in kg
+        - K is scaling factor based on overpressure level
+        
+        Args:
+            tnt_equivalent_kg: TNT equivalent mass in kg
+            
+        Returns:
+            Blast radius in kilometers (severe damage threshold)
+        """
+        
+        # Cube root scaling law for blast radius
+        # K factors for different overpressure levels:
+        # - 20 psi (138 kPa): severe structural damage, K ≈ 10
+        # - 5 psi (34 kPa): moderate damage, K ≈ 18
+        # - 1 psi (7 kPa): glass breakage, K ≈ 40
+        
+        # Use 5 psi (moderate damage) as critical radius
+        K = 18  # meters per kg^(1/3)
+        
+        radius_m = K * (tnt_equivalent_kg ** (1/3))
+        radius_km = radius_m / 1000
+        
+        # Minimum 0.1 km for any explosion
+        return max(0.1, radius_km)
     
     def _gaussian_plume_concentration(
         self,
@@ -130,14 +206,21 @@ class DispersionService:
         """
         
         if distance_m <= 0:
-            return 0.0
+            # At source, use very high concentration
+            return emission_rate * 1e6 / (4/3 * np.pi * 10**3)  # Assume 10m radius sphere
         
         # Get dispersion parameters
         params = self.stability_classes.get(stability_class, self.stability_classes['D'])
         
         # Calculate dispersion coefficients (simplified power law)
-        sigma_y = params['sigma_y'] * (distance_m ** 0.894)
-        sigma_z = params['sigma_z'] * (distance_m ** 0.894)
+        # More accurate formulas based on distance ranges
+        if distance_m < 1000:
+            sigma_y = params['sigma_y'] * (distance_m ** 0.894)
+            sigma_z = params['sigma_z'] * (distance_m ** 0.894)
+        else:
+            # For longer distances, use different scaling
+            sigma_y = params['sigma_y'] * 1000**0.894 * (distance_m/1000) ** 0.5
+            sigma_z = params['sigma_z'] * 1000**0.894 * (distance_m/1000) ** 0.5
         
         # Avoid division by zero
         sigma_y = max(sigma_y, 1.0)
@@ -156,9 +239,12 @@ class DispersionService:
         )
         
         # Concentration at plume centerline (y=0)
-        C = (Q / (2 * np.pi * u * sigma_y * sigma_z)) * vertical_term
+        try:
+            C = (Q / (2 * np.pi * u * sigma_y * sigma_z)) * vertical_term
+        except (FloatingPointError, ZeroDivisionError):
+            C = 0.0
         
-        return float(C)
+        return float(max(0, C))
     
     def _calculate_max_distance(
         self,
@@ -175,8 +261,16 @@ class DispersionService:
             Maximum distance in kilometers
         """
         
-        # Iterative search for maximum distance
-        distances = np.logspace(1, 5, 100)  # 10m to 100km
+        # For high emission rates, use longer distance search
+        if emission_rate > 100:  # kg/s
+            max_search_km = 50
+        elif emission_rate > 10:
+            max_search_km = 30
+        else:
+            max_search_km = 20
+        
+        # Logarithmic search for maximum distance
+        distances = np.logspace(1, np.log10(max_search_km * 1000), 100)  # 10m to max_km
         
         for dist in distances:
             conc = self._gaussian_plume_concentration(
@@ -190,7 +284,7 @@ class DispersionService:
             if conc < threshold_mg_m3:
                 return dist / 1000  # convert to km
         
-        return 50.0  # default maximum
+        return max_search_km  # return maximum
     
     def calculate_dosage(
         self,

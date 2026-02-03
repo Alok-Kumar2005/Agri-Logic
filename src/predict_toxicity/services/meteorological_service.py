@@ -22,6 +22,10 @@ class MeteorologicalService:
             if self.era5_path.exists():
                 self.dataset = xr.open_dataset(self.era5_path)
                 logger.info(f"Loaded ERA5 dataset from {self.era5_path}")
+                
+                # Log available variables and dimensions for debugging
+                logger.info(f"ERA5 dimensions: {list(self.dataset.dims.keys())}")
+                logger.info(f"ERA5 variables: {list(self.dataset.data_vars.keys())}")
             else:
                 logger.warning(f"ERA5 dataset not found at {self.era5_path}")
         except Exception as e:
@@ -44,6 +48,16 @@ class MeteorologicalService:
             return self._generate_synthetic_weather(lat, lon)
         
         try:
+            # ERA5 uses 'valid_time' not 'time' - check which dimension exists
+            time_dim = None
+            if 'time' in self.dataset.dims:
+                time_dim = 'time'
+            elif 'valid_time' in self.dataset.dims:
+                time_dim = 'valid_time'
+            else:
+                logger.warning(f"No time dimension found in dataset. Available dims: {list(self.dataset.dims.keys())}")
+                return self._generate_synthetic_weather(lat, lon)
+            
             # Select nearest point and most recent time
             data = self.dataset.sel(
                 latitude=lat,
@@ -52,23 +66,21 @@ class MeteorologicalService:
             )
             
             # Get latest timestamp
-            latest_time = data.time.values[-1]
-            latest_data = data.sel(time=latest_time)
+            latest_time = data[time_dim].values[-1]
+            latest_data = data.sel({time_dim: latest_time})
+            
+            # Extract weather parameters with safe defaults
+            u10 = float(latest_data.get('u10', 0).values) if 'u10' in latest_data else 0
+            v10 = float(latest_data.get('v10', 0).values) if 'v10' in latest_data else 0
             
             return {
                 "timestamp": pd.Timestamp(latest_time).isoformat(),
                 "location": {"lat": lat, "lon": lon},
-                "temperature_c": float(latest_data.get('t2m', 288.15).values) - 273.15,
-                "wind_speed_ms": float(np.sqrt(
-                    latest_data.get('u10', 0).values**2 + 
-                    latest_data.get('v10', 0).values**2
-                )),
-                "wind_direction_deg": float(np.arctan2(
-                    latest_data.get('v10', 0).values,
-                    latest_data.get('u10', 0).values
-                ) * 180 / np.pi),
-                "pressure_hpa": float(latest_data.get('sp', 101325).values / 100),
-                "boundary_layer_height_m": float(latest_data.get('blh', 1000).values)
+                "temperature_c": float(latest_data.get('t2m', 288.15).values) - 273.15 if 't2m' in latest_data else 15.0,
+                "wind_speed_ms": float(np.sqrt(u10**2 + v10**2)),
+                "wind_direction_deg": float(np.arctan2(v10, u10) * 180 / np.pi) if (u10 != 0 or v10 != 0) else 0,
+                "pressure_hpa": float(latest_data.get('sp', 101325).values / 100) if 'sp' in latest_data else 1013.25,
+                "boundary_layer_height_m": float(latest_data.get('blh', 1000).values) if 'blh' in latest_data else 1000.0
             }
             
         except Exception as e:
@@ -101,26 +113,29 @@ class MeteorologicalService:
             return []
         
         try:
+            # Determine time dimension
+            time_dim = 'valid_time' if 'valid_time' in self.dataset.dims else 'time'
+            
             # Select location and time range
             data = self.dataset.sel(
                 latitude=lat,
                 longitude=lon,
-                time=slice(start_date, end_date),
+                **{time_dim: slice(start_date, end_date)},
                 method='nearest'
             )
             
             results = []
-            for time in data.time.values:
-                time_data = data.sel(time=time)
+            for time in data[time_dim].values:
+                time_data = data.sel({time_dim: time})
+                
+                u10 = float(time_data.get('u10', 0).values) if 'u10' in time_data else 0
+                v10 = float(time_data.get('v10', 0).values) if 'v10' in time_data else 0
                 
                 record = {
                     "timestamp": pd.Timestamp(time).isoformat(),
-                    "temperature_c": float(time_data.get('t2m', 288.15).values) - 273.15,
-                    "wind_speed_ms": float(np.sqrt(
-                        time_data.get('u10', 0).values**2 + 
-                        time_data.get('v10', 0).values**2
-                    )),
-                    "pressure_hpa": float(time_data.get('sp', 101325).values / 100),
+                    "temperature_c": float(time_data.get('t2m', 288.15).values) - 273.15 if 't2m' in time_data else 15.0,
+                    "wind_speed_ms": float(np.sqrt(u10**2 + v10**2)),
+                    "pressure_hpa": float(time_data.get('sp', 101325).values / 100) if 'sp' in time_data else 1013.25,
                 }
                 
                 if parameters:
@@ -246,8 +261,8 @@ class MeteorologicalService:
             forecast.append({
                 "timestamp": forecast_time.isoformat(),
                 "temperature_c": current['temperature_c'] + np.random.uniform(-2, 2),
-                "wind_speed_ms": current['wind_speed_ms'] + np.random.uniform(-1, 1),
-                "wind_direction_deg": current['wind_direction_deg'] + np.random.uniform(-15, 15),
+                "wind_speed_ms": max(0, current['wind_speed_ms'] + np.random.uniform(-1, 1)),
+                "wind_direction_deg": (current['wind_direction_deg'] + np.random.uniform(-15, 15)) % 360,
                 "pressure_hpa": current['pressure_hpa'] + np.random.uniform(-2, 2)
             })
         
@@ -328,5 +343,3 @@ class MeteorologicalService:
         mixing_height = 0.3 * friction_velocity / f
         
         return max(100, min(mixing_height, 3000))
-
-
