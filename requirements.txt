@@ -36,3 +36,4 @@ python-dotenv
 python-multipart
 pydantic
 pydantic-settings
+dask[array]

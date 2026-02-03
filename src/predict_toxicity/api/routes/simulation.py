@@ -7,9 +7,10 @@ from typing import List, Dict, Optional
 from datetime import datetime
 import uuid
 
-from services.simulation_service import SimulationService
-from services.hydrological_service import HydrologicalService
-from services.dispersion_service import DispersionService
+from src.predict_toxicity.services.simulation_service import SimulationService
+from src.predict_toxicity.services.hydrological_service import HydrologicalService
+from src.predict_toxicity.services.dispersion_service import DispersionService
+from src.logging import logging as logger
 
 router = APIRouter()
 
@@ -75,7 +76,7 @@ async def initiate_calamity_simulation(
         "explosion": "Blast_Radius_V1"
     }
     
-    engine = engine_mapping.get(request.calamity_type, "Generic_Simulation_V1")
+    engine = engine_mapping.get(request.calamity_type.lower(), "Generic_Simulation_V1")
     
     # Create simulation record
     simulation = {
@@ -98,8 +99,11 @@ async def initiate_calamity_simulation(
         simulation_id,
         request.site_id,
         request.calamity_type,
-        request.magnitude
+        request.magnitude,
+        request.meteorological_conditions
     )
+    
+    logger.info(f"Simulation {simulation_id} initiated for {request.site_id}")
     
     return SimulationResponse(
         simulation_id=simulation_id,
@@ -128,16 +132,18 @@ async def get_risk_profile(sim_id: str):
             detail=f"Simulation is {simulation['status']}. Wait for completion."
         )
     
-    # Retrieve results from simulation service
-    service = SimulationService()
-    results = service.get_results(sim_id)
+    # Retrieve results from simulation
+    results = simulation.get("results", {})
+    
+    # Extract health risks
+    health_risks = results.get("affected_metrics", {}).get("health_risks", [])
     
     return RiskProfileResponse(
         simulation_id=sim_id,
         critical_radius_km=results.get("critical_radius_km", 0.0),
         affected_metrics=results.get("affected_metrics", {}),
         fallout_geometry=results.get("fallout_geometry", {}),
-        health_risks=results.get("health_risks", []),
+        health_risks=health_risks,
         timestamp=datetime.now()
     )
 
@@ -188,7 +194,8 @@ async def run_simulation(
     simulation_id: str,
     site_id: str,
     calamity_type: str,
-    magnitude: float
+    magnitude: float,
+    meteo_override: Optional[Dict] = None
 ):
     """
     Background task to execute simulation
@@ -196,44 +203,45 @@ async def run_simulation(
     try:
         simulation = simulations_db[simulation_id]
         
-        # Step 1: Load industrial facility data
-        simulation["current_step"] = "Loading facility data"
+        # Step 1: Initialize simulation service
+        simulation["current_step"] = "Initializing simulation engine"
         simulation["progress"] = 10
+        logger.info(f"[{simulation_id}] Initializing")
         
-        # Step 2: Load meteorological conditions
-        simulation["current_step"] = "Loading meteorological data"
-        simulation["progress"] = 25
+        service = SimulationService()
         
-        # Step 3: Load terrain data
-        simulation["current_step"] = "Loading terrain data"
-        simulation["progress"] = 40
-        
-        # Step 4: Run hydrological/dispersion model
+        # Step 2: Run simulation
         simulation["current_step"] = "Running simulation model"
-        simulation["progress"] = 60
+        simulation["progress"] = 40
+        logger.info(f"[{simulation_id}] Running model")
         
-        if calamity_type == "flood":
-            hydro_service = HydrologicalService()
-            results = hydro_service.simulate_flood(site_id, magnitude)
-        else:
-            dispersion_service = DispersionService()
-            results = dispersion_service.simulate_dispersion(site_id, calamity_type, magnitude)
+        results = service.run_simulation(
+            site_id=site_id,
+            calamity_type=calamity_type,
+            magnitude=magnitude,
+            meteorological_override=meteo_override
+        )
         
-        # Step 5: Calculate impact metrics
-        simulation["current_step"] = "Calculating impact metrics"
+        # Step 3: Process results
+        simulation["current_step"] = "Processing results"
         simulation["progress"] = 80
+        logger.info(f"[{simulation_id}] Processing results")
         
-        # Step 6: Generate risk profile
-        simulation["current_step"] = "Generating risk profile"
-        simulation["progress"] = 95
-        
-        # Store results
-        simulation["results"] = results
-        simulation["status"] = "COMPLETED"
-        simulation["progress"] = 100
-        simulation["current_step"] = "Completed"
+        if results.get("status") == "completed":
+            # Store results
+            simulation["results"] = results
+            simulation["status"] = "COMPLETED"
+            simulation["progress"] = 100
+            simulation["current_step"] = "Completed"
+            logger.info(f"[{simulation_id}] Completed successfully")
+        else:
+            simulation["status"] = "FAILED"
+            simulation["error"] = results.get("error", "Unknown error")
+            simulation["current_step"] = "Failed"
+            logger.error(f"[{simulation_id}] Failed: {simulation['error']}")
         
     except Exception as e:
+        logger.error(f"[{simulation_id}] Exception: {str(e)}")
         simulation["status"] = "FAILED"
         simulation["error"] = str(e)
         simulation["current_step"] = "Failed"

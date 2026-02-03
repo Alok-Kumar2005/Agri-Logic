@@ -4,20 +4,15 @@ from shapely.geometry import Point
 from typing import List, Dict, Optional
 from src.logging import logging as logger
 
-from config.settings import settings
+from src.predict_toxicity.config.settings import settings
 
 class FacilitiesService:
-    """
-    Service for managing industrial facility data from E-PRTR
-    """
-    
     def __init__(self):
         self.air_releases_df = None
         self.water_releases_df = None
         self._load_data()
     
     def _load_data(self):
-        """Load industrial facility data"""
         try:
             # Load air releases
             if settings.INDUSTRIAL_AIR_RELEASES_PATH.exists():
@@ -37,18 +32,6 @@ class FacilitiesService:
         filters: Dict,
         limit: int = 100
     ) -> List[Dict]:
-        """
-        Search facilities with various filters
-        
-        Args:
-            filters: Dictionary of filter criteria
-            limit: Maximum number of results
-            
-        Returns:
-            List of facility dictionaries
-        """
-        
-        # Combine air and water releases
         df = self._get_combined_dataframe()
         
         if df is None or len(df) == 0:
@@ -88,16 +71,6 @@ class FacilitiesService:
         return facilities
     
     def get_by_id(self, facility_id: str) -> Optional[Dict]:
-        """
-        Get facility by ID
-        
-        Args:
-            facility_id: Facility identifier
-            
-        Returns:
-            Facility dictionary or None
-        """
-        
         df = self._get_combined_dataframe()
         
         if df is None:
@@ -111,16 +84,6 @@ class FacilitiesService:
         return self._format_facility(facility_data)
     
     def get_pollutants(self, facility_id: str) -> List[Dict]:
-        """
-        Get list of pollutants for a facility
-        
-        Args:
-            facility_id: Facility identifier
-            
-        Returns:
-            List of pollutant dictionaries
-        """
-        
         df = self._get_combined_dataframe()
         
         if df is None:
@@ -145,18 +108,6 @@ class FacilitiesService:
         start_year: Optional[int] = None,
         end_year: Optional[int] = None
     ) -> List[Dict]:
-        """
-        Get historical emissions for a facility
-        
-        Args:
-            facility_id: Facility identifier
-            start_year: Start year
-            end_year: End year
-            
-        Returns:
-            List of emission records by year
-        """
-        
         df = self._get_combined_dataframe()
         
         if df is None:
@@ -189,19 +140,6 @@ class FacilitiesService:
         radius_km: float,
         limit: int = 50
     ) -> List[Dict]:
-        """
-        Find facilities near a point
-        
-        Args:
-            lat: Latitude
-            lon: Longitude
-            radius_km: Search radius in kilometers
-            limit: Maximum results
-            
-        Returns:
-            List of nearby facilities
-        """
-        
         df = self._get_combined_dataframe()
         
         if df is None:
@@ -235,18 +173,6 @@ class FacilitiesService:
         sector: Optional[str] = None,
         year: Optional[int] = None
     ) -> Dict:
-        """
-        Get statistical summary
-        
-        Args:
-            country: Filter by country
-            sector: Filter by sector
-            year: Filter by year
-            
-        Returns:
-            Statistics dictionary
-        """
-        
         df = self._get_combined_dataframe()
         
         if df is None:

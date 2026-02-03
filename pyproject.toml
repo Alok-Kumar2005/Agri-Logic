@@ -10,6 +10,7 @@ dependencies = [
     "cdsapi>=0.7.7",
     "cfgrib>=0.9.15.1",
     "dagshub>=0.6.5",
+    "dask[array]>=2026.1.2",
     "earthengine-api>=1.7.10",
     "fastapi>=0.128.0",
     "fiona>=1.10.1",
