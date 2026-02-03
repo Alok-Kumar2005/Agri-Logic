@@ -1,9 +1,6 @@
-"""
-Simulation API routes for disaster modeling
-"""
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 import uuid
 
@@ -21,7 +18,25 @@ class CalamityRequest(BaseModel):
     calamity_type: str = Field(..., description="Type of disaster: flood, earthquake, fire, explosion")
     magnitude: float = Field(..., description="Disaster magnitude")
     unit: str = Field(..., description="Unit of magnitude (e.g., meters_above_base, richter_scale)")
-    meteorological_conditions: Optional[Dict] = Field(None, description="Optional weather override")
+    meteorological_conditions: Optional[Dict[str, Any]] = Field(
+        None, 
+        description="Optional weather override (wind_speed_ms, wind_direction_deg, temperature_c, etc.)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "site_id": "ind_site_taloja_44",
+                "calamity_type": "flood",
+                "magnitude": 2.5,
+                "unit": "meters_above_base",
+                "meteorological_conditions": {
+                    "wind_speed_ms": 5.0,
+                    "wind_direction_deg": 180.0,
+                    "temperature_c": 25.0
+                }
+            }
+        }
 
 class SimulationResponse(BaseModel):
     """Response model for simulation initiation"""
@@ -63,6 +78,7 @@ async def initiate_calamity_simulation(
     - **calamity_type**: Type of disaster (flood, earthquake, fire, explosion)
     - **magnitude**: Disaster magnitude
     - **unit**: Unit of measurement
+    - **meteorological_conditions**: Optional weather parameters to override
     """
     
     # Generate simulation ID
@@ -135,14 +151,90 @@ async def get_risk_profile(sim_id: str):
     # Retrieve results from simulation
     results = simulation.get("results", {})
     
+    # Extract data based on simulation type
+    if not results:
+        raise HTTPException(
+            status_code=500,
+            detail="Simulation completed but no results available"
+        )
+    
+    # Get critical radius
+    critical_radius = results.get("critical_radius_km", 0.0)
+    if critical_radius == 0:
+        # Try alternative keys
+        critical_radius = results.get("max_distance_km", 0.0)
+    
+    # Get affected metrics
+    affected_metrics = results.get("affected_metrics", {})
+    
+    # For dispersion simulations, build affected_metrics from other fields
+    if not affected_metrics and results.get("calamity_type") in ["fire", "explosion"]:
+        # Calculate affected area from radius
+        affected_area_km2 = 3.14159 * (critical_radius ** 2)
+        est_population = int(affected_area_km2 * 500)  # 500 people/km²
+        
+        affected_metrics = {
+            "est_population": est_population,
+            "affected_area_km2": round(affected_area_km2, 2),
+            "agri_land_acres": round(affected_area_km2 * 0.4 * 247.105, 1),
+            "emission_rate_kg_s": results.get("emission_rate_kg_s", 0),
+            "total_release_kg": results.get("total_release_kg", 0),
+            "max_concentration_mg_m3": results.get("concentrations", [{}])[0].get("concentration_mg_m3", 0) if results.get("concentrations") else 0,
+            "primary_toxins": ["Combustion products", "Particulate matter"],
+            "health_risks": []
+        }
+        
+        # Determine health risks based on concentration
+        max_conc = affected_metrics.get("max_concentration_mg_m3", 0)
+        if max_conc > 100:
+            affected_metrics["health_risks"].append("Severe acute toxicity")
+            affected_metrics["health_risks"].append("Immediate evacuation required")
+        elif max_conc > 50:
+            affected_metrics["health_risks"].append("Respiratory distress")
+            affected_metrics["health_risks"].append("Eye and skin irritation")
+        elif max_conc > 10:
+            affected_metrics["health_risks"].append("Respiratory stress")
+            affected_metrics["health_risks"].append("Shelter in place recommended")
+        else:
+            affected_metrics["health_risks"].append("Low concentration - monitor air quality")
+    
     # Extract health risks
-    health_risks = results.get("affected_metrics", {}).get("health_risks", [])
+    health_risks = affected_metrics.get("health_risks", [])
+    
+    # Get fallout geometry
+    fallout_geometry = results.get("fallout_geometry", {})
+    
+    # If no fallout geometry, create one from critical radius
+    if not fallout_geometry or not fallout_geometry.get("coordinates"):
+        # Get facility location from results
+        facility_info = results.get("facility_info", {})
+        location = facility_info.get("location", {"lat": 45.0, "lon": 10.0})
+        
+        lat = location["lat"]
+        lon = location["lon"]
+        
+        # Generate circular polygon
+        import numpy as np
+        coords = []
+        num_points = 32
+        km_per_degree = 111.0
+        
+        for i in range(num_points + 1):
+            angle = (i / num_points) * 2 * np.pi
+            lat_offset = (critical_radius / km_per_degree) * np.sin(angle)
+            lon_offset = (critical_radius / km_per_degree) * np.cos(angle)
+            coords.append([lon + lon_offset, lat + lat_offset])
+        
+        fallout_geometry = {
+            "type": "Polygon",
+            "coordinates": [coords]
+        }
     
     return RiskProfileResponse(
         simulation_id=sim_id,
-        critical_radius_km=results.get("critical_radius_km", 0.0),
-        affected_metrics=results.get("affected_metrics", {}),
-        fallout_geometry=results.get("fallout_geometry", {}),
+        critical_radius_km=critical_radius,
+        affected_metrics=affected_metrics,
+        fallout_geometry=fallout_geometry,
         health_risks=health_risks,
         timestamp=datetime.now()
     )
@@ -242,6 +334,9 @@ async def run_simulation(
         
     except Exception as e:
         logger.error(f"[{simulation_id}] Exception: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         simulation["status"] = "FAILED"
         simulation["error"] = str(e)
         simulation["current_step"] = "Failed"
+        simulation["progress"] = 0

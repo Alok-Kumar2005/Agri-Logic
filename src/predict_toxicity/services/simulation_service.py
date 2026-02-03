@@ -61,13 +61,21 @@ class SimulationService:
             lat = facility['latitude']
             lon = facility['longitude']
             
-            # Step 2: Get meteorological conditions
-            if meteorological_override:
-                weather = meteorological_override
-            else:
-                weather = self.meteo_service.get_current_weather(lat, lon)
+            # Step 2: Get meteorological conditions with proper override handling
+            default_weather = self.meteo_service.get_current_weather(lat, lon)
             
-            logger.info(f"Weather conditions: {weather['wind_speed_ms']:.1f} m/s wind")
+            if meteorological_override and isinstance(meteorological_override, dict):
+                # Filter out empty nested dicts like {"additionalProp1": {}}
+                filtered_override = {
+                    k: v for k, v in meteorological_override.items() 
+                    if v and not (isinstance(v, dict) and not v)
+                }
+                # Merge override with default weather to ensure all required keys exist
+                weather = {**default_weather, **filtered_override}
+            else:
+                weather = default_weather
+            
+            logger.info(f"Weather conditions: {weather.get('wind_speed_ms', 5.0):.1f} m/s wind")
             
             # Step 3: Get terrain data
             elevation = self.terrain_service.get_elevation(lat, lon) or 100.0
@@ -90,8 +98,8 @@ class SimulationService:
                     site_id=site_id,
                     calamity_type=calamity_type,
                     magnitude=magnitude,
-                    wind_speed=weather['wind_speed_ms'],
-                    wind_direction=weather['wind_direction_deg'],
+                    wind_speed=weather.get('wind_speed_ms', 5.0),
+                    wind_direction=weather.get('wind_direction_deg', 0.0),
                     stability_class='D',
                     release_height=10.0
                 )
@@ -131,6 +139,8 @@ class SimulationService:
             
         except Exception as e:
             logger.error(f"Simulation failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {
                 "error": str(e),
                 "status": "failed"

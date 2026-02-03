@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     INDUSTRIAL_WATER_RELEASES_PATH: Path = RAW_DATA_DIR / "industrial" / "water_releases.csv"
     
     # Meteorological Data
-    ERA5_DATA_PATH: Path = RAW_DATA_DIR / "meteorological" / "data_stream-oper_stemType-instant.nc"
+    ERA5_DATA_PATH: Path = RAW_DATA_DIR / "meteorological" / "data_stream.nc"
     
     # Terrain Data
     DEM_PATH: Path = RAW_DATA_DIR / "terrain" / "elevation.tif"
