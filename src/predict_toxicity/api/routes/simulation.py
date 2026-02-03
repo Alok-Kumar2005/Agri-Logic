@@ -169,8 +169,14 @@ async def get_risk_profile(sim_id: str):
     
     # For dispersion simulations, build affected_metrics from other fields
     if not affected_metrics and results.get("calamity_type") in ["fire", "explosion"]:
+        # Get maximum concentration from concentrations list
+        concentrations = results.get("concentrations", [])
+        max_concentration = 0
+        if concentrations:
+            max_concentration = max(c.get("concentration_mg_m3", 0) for c in concentrations)
+        
         # Calculate affected area from radius
-        affected_area_km2 = 3.14159 * (critical_radius ** 2)
+        affected_area_km2 = results.get("affected_area_km2", 3.14159 * (critical_radius ** 2))
         est_population = int(affected_area_km2 * 500)  # 500 people/km²
         
         affected_metrics = {
@@ -179,24 +185,26 @@ async def get_risk_profile(sim_id: str):
             "agri_land_acres": round(affected_area_km2 * 0.4 * 247.105, 1),
             "emission_rate_kg_s": results.get("emission_rate_kg_s", 0),
             "total_release_kg": results.get("total_release_kg", 0),
-            "max_concentration_mg_m3": results.get("concentrations", [{}])[0].get("concentration_mg_m3", 0) if results.get("concentrations") else 0,
-            "primary_toxins": ["Combustion products", "Particulate matter"],
+            "max_concentration_mg_m3": round(max_concentration, 2),
+            "primary_toxins": ["Combustion products", "Particulate matter", "Toxic gases"],
             "health_risks": []
         }
         
         # Determine health risks based on concentration
-        max_conc = affected_metrics.get("max_concentration_mg_m3", 0)
-        if max_conc > 100:
+        if max_concentration > 100:
             affected_metrics["health_risks"].append("Severe acute toxicity")
             affected_metrics["health_risks"].append("Immediate evacuation required")
-        elif max_conc > 50:
+            affected_metrics["health_risks"].append("Respiratory failure risk")
+        elif max_concentration > 50:
             affected_metrics["health_risks"].append("Respiratory distress")
             affected_metrics["health_risks"].append("Eye and skin irritation")
-        elif max_conc > 10:
-            affected_metrics["health_risks"].append("Respiratory stress")
             affected_metrics["health_risks"].append("Shelter in place recommended")
+        elif max_concentration > 10:
+            affected_metrics["health_risks"].append("Respiratory stress")
+            affected_metrics["health_risks"].append("Long-term exposure concerns")
         else:
-            affected_metrics["health_risks"].append("Low concentration - monitor air quality")
+            affected_metrics["health_risks"].append("Elevated pollutant levels")
+            affected_metrics["health_risks"].append("Monitor air quality")
     
     # Extract health risks
     health_risks = affected_metrics.get("health_risks", [])

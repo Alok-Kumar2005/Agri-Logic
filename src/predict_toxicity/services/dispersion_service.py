@@ -66,6 +66,9 @@ class DispersionService:
                 duration_hours = 1
                 effective_height = release_height
             
+            # Ensure minimum wind speed for model stability
+            wind_speed = max(wind_speed, 0.5)
+            
             # For explosions, use blast radius as minimum critical radius
             if calamity_type == "explosion":
                 # Calculate atmospheric dispersion radius
@@ -91,8 +94,15 @@ class DispersionService:
             distances = [0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0]
             # Filter distances to only those within max_distance
             relevant_distances = [d for d in distances if d <= max_distance_km]
-            if not relevant_distances:
-                relevant_distances = [0.1, 0.5, 1.0]
+            if not relevant_distances or len(relevant_distances) < 3:
+                # Ensure we have at least 3 distance points
+                relevant_distances = [
+                    max_distance_km * 0.1,
+                    max_distance_km * 0.3,
+                    max_distance_km * 0.5,
+                    max_distance_km * 0.7,
+                    max_distance_km * 1.0
+                ]
             
             concentrations = []
             
@@ -106,7 +116,7 @@ class DispersionService:
                     0  # ground level
                 )
                 concentrations.append({
-                    "distance_km": dist_km,
+                    "distance_km": round(dist_km, 2),
                     "concentration_mg_m3": round(conc, 4)
                 })
             
@@ -261,16 +271,30 @@ class DispersionService:
             Maximum distance in kilometers
         """
         
-        # For high emission rates, use longer distance search
+        # Adjust threshold based on emission rate for realistic results
+        # Higher emissions = use higher threshold to avoid tiny radii
         if emission_rate > 100:  # kg/s
             max_search_km = 50
+            # For very high emissions, use higher threshold (10 mg/m³)
+            threshold_mg_m3 = max(threshold_mg_m3, 10.0)
+        elif emission_rate > 50:
+            max_search_km = 40
+            threshold_mg_m3 = max(threshold_mg_m3, 5.0)
         elif emission_rate > 10:
             max_search_km = 30
+            threshold_mg_m3 = max(threshold_mg_m3, 2.0)
         else:
             max_search_km = 20
         
+        # Low wind speed significantly extends impact radius
+        if wind_speed < 2.0:
+            max_search_km = max_search_km * 1.5
+        
         # Logarithmic search for maximum distance
-        distances = np.logspace(1, np.log10(max_search_km * 1000), 100)  # 10m to max_km
+        # Start from 100m (not 10m) for more realistic modeling
+        distances = np.logspace(2, np.log10(max_search_km * 1000), 100)  # 100m to max_km
+        
+        last_valid_distance = 0.5  # Minimum 500m radius
         
         for dist in distances:
             conc = self._gaussian_plume_concentration(
@@ -281,10 +305,14 @@ class DispersionService:
                 release_height
             )
             
-            if conc < threshold_mg_m3:
-                return dist / 1000  # convert to km
+            if conc >= threshold_mg_m3:
+                last_valid_distance = dist / 1000  # convert to km
+            elif last_valid_distance > 0:
+                # Found the crossover point
+                return last_valid_distance
         
-        return max_search_km  # return maximum
+        # If we never dropped below threshold, return max search distance
+        return max(last_valid_distance, max_search_km * 0.5)
     
     def calculate_dosage(
         self,
