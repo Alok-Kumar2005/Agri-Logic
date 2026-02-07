@@ -4,6 +4,7 @@ from src.predict_toxicity.api.routes.facilities import router as facilities_rout
 from src.predict_toxicity.api.routes.meteorological import router as meteo_router
 from src.predict_toxicity.api.routes.simulation import router as simulation_router
 from src.predict_toxicity.api.routes.terrain import router as terrain_router
+from src.DisplacementDetector.api import router as displacement_router
 
 app = FastAPI(
     title="Agri-Logic & Toxicity Prediction API",
@@ -19,10 +20,11 @@ app.include_router(facilities_router, prefix="/api/facilities", tags=["Industria
 app.include_router(meteo_router, prefix="/api/meteorological", tags=["Meteorological Data"])
 app.include_router(simulation_router, prefix="/api/simulate", tags=["Disaster Simulation"])
 app.include_router(terrain_router, prefix="/api/terrain", tags=["Terrain Analysis"])
+app.include_router(displacement_router, prefix="/api/displacement", tags=["Displacement Detector"])
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "services": ["chemical_analysis", "toxicity_prediction"]}
+    return {"status": "ok", "services": ["chemical_analysis", "toxicity_prediction", "displacement_detection"]}
 
 @app.get("/")
 async def root():
