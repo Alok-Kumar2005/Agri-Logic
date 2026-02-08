@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agri-Logic Command Center</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <header class="hero">
+    <nav class="nav">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <div>
+          <h1>Agri-Logic</h1>
+          <p>Soil, Safety & Stability Intelligence</p>
+        </div>
+      </div>
+      <div class="nav-links">
+        <a href="/docs" target="_blank" rel="noreferrer">API Docs</a>
+        <a href="#controls">Run Analyses</a>
+        <a href="#support">Support</a>
+      </div>
+    </nav>
+    <div class="hero-content">
+      <div>
+        <h2>Unified monitoring for soil chemistry, industrial risk, and land stability.</h2>
+        <p>
+          Launch end-to-end analyses from a single control room. Submit AOI-driven soil
+          diagnostics, simulate calamities, and query real-time terrain and meteorology
+          data while keeping industrial facilities in view.
+        </p>
+        <div class="hero-actions">
+          <button class="primary" data-scroll="#controls">Launch Workflows</button>
+          <button class="secondary" data-scroll="#status">View Latest Output</button>
+        </div>
+      </div>
+      <div class="hero-card">
+        <h3>System Health</h3>
+        <p>Check that each microservice is online before you begin.</p>
+        <button class="ghost" id="health-check">Run Health Check</button>
+        <pre class="output" id="health-output">Awaiting status...</pre>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="grid" id="controls">
+      <article class="card">
+        <header>
+          <h3>Chemical Analysis</h3>
+          <p>Launch AOI nutrient assessment with optional crop context.</p>
+        </header>
+        <div class="form-grid">
+          <label>
+            AOI Name
+            <input id="agri-name" type="text" placeholder="Northern Delta 12" />
+          </label>
+          <label>
+            Crop Type
+            <input id="agri-crop" type="text" placeholder="Maize" />
+          </label>
+          <label>
+            Start Date
+            <input id="agri-start" type="date" />
+          </label>
+          <label>
+            End Date
+            <input id="agri-end" type="date" />
+          </label>
+          <label class="full">
+            Geometry (GeoJSON)
+            <textarea id="agri-geometry" rows="6"></textarea>
+          </label>
+        </div>
+        <div class="actions">
+          <button class="primary" id="agri-start-btn">Start Analysis</button>
+          <button class="ghost" id="agri-sample">Load Sample</button>
+        </div>
+        <label>
+          Task ID
+          <input id="agri-task" type="text" placeholder="agri_12345678" />
+        </label>
+        <button class="secondary" id="agri-status-btn">Fetch Result</button>
+        <pre class="output" id="agri-output">No analysis started yet.</pre>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Displacement Stability</h3>
+          <p>Analyze ground stability from EGMS time-series displacement.</p>
+        </header>
+        <div class="form-grid">
+          <label>
+            Latitude
+            <input id="stab-lat" type="number" step="0.0001" placeholder="28.6139" />
+          </label>
+          <label>
+            Longitude
+            <input id="stab-lon" type="number" step="0.0001" placeholder="77.2090" />
+          </label>
+        </div>
+        <div class="actions">
+          <button class="primary" id="stab-start-btn">Start Stability Scan</button>
+          <button class="ghost" id="stab-sample">Use Sample</button>
+        </div>
+        <label>
+          Task ID
+          <input id="stab-task" type="text" placeholder="stab_1234abcd" />
+        </label>
+        <button class="secondary" id="stab-status-btn">Fetch Result</button>
+        <pre class="output" id="stab-output">Waiting for coordinates.</pre>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Industrial Facilities</h3>
+          <p>Search facilities and filter by sector, pollutant, or location.</p>
+        </header>
+        <div class="form-grid">
+          <label>
+            Country
+            <input id="fac-country" type="text" placeholder="India" />
+          </label>
+          <label>
+            Sector
+            <input id="fac-sector" type="text" placeholder="Chemical industry" />
+          </label>
+          <label>
+            Pollutant
+            <input id="fac-pollutant" type="text" placeholder="Ammonia" />
+          </label>
+          <label>
+            Year
+            <input id="fac-year" type="number" placeholder="2020" />
+          </label>
+          <label>
+            Limit
+            <input id="fac-limit" type="number" placeholder="25" value="25" />
+          </label>
+        </div>
+        <div class="actions">
+          <button class="primary" id="fac-search-btn">Search Facilities</button>
+          <button class="ghost" id="fac-sample">Load Sample</button>
+        </div>
+        <pre class="output" id="fac-output">Run a search to display results.</pre>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Calamity Simulation</h3>
+          <p>Simulate flood, earthquake, fire, or explosion impacts.</p>
+        </header>
+        <div class="form-grid">
+          <label>
+            Site ID
+            <input id="sim-site" type="text" placeholder="ind_site_taloja_44" />
+          </label>
+          <label>
+            Calamity Type
+            <select id="sim-type">
+              <option value="flood">Flood</option>
+              <option value="earthquake">Earthquake</option>
+              <option value="fire">Fire</option>
+              <option value="explosion">Explosion</option>
+            </select>
+          </label>
+          <label>
+            Magnitude
+            <input id="sim-mag" type="number" step="0.1" placeholder="2.5" />
+          </label>
+          <label>
+            Unit
+            <input id="sim-unit" type="text" placeholder="meters_above_base" />
+          </label>
+        </div>
+        <label class="full">
+          Optional Meteorological Overrides (JSON)
+          <textarea id="sim-meteo" rows="4"></textarea>
+        </label>
+        <div class="actions">
+          <button class="primary" id="sim-start-btn">Run Simulation</button>
+          <button class="ghost" id="sim-sample">Load Sample</button>
+        </div>
+        <label>
+          Simulation ID
+          <input id="sim-id" type="text" placeholder="sim_tox_123abc" />
+        </label>
+        <button class="secondary" id="sim-risk-btn">Fetch Risk Profile</button>
+        <pre class="output" id="sim-output">Simulation output will appear here.</pre>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Meteorological Intelligence</h3>
+          <p>Access real-time weather and dispersion inputs for modeling.</p>
+        </header>
+        <div class="form-grid">
+          <label>
+            Latitude
+            <input id="met-lat" type="number" step="0.0001" placeholder="19.0760" />
+          </label>
+          <label>
+            Longitude
+            <input id="met-lon" type="number" step="0.0001" placeholder="72.8777" />
+          </label>
+          <label>
+            Forecast Hours
+            <input id="met-hours" type="number" placeholder="24" value="24" />
+          </label>
+        </div>
+        <div class="actions">
+          <button class="primary" id="met-current-btn">Current Weather</button>
+          <button class="secondary" id="met-forecast-btn">Forecast</button>
+          <button class="ghost" id="met-sample">Load Sample</button>
+        </div>
+        <pre class="output" id="met-output">Awaiting meteorological request.</pre>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Terrain Analysis</h3>
+          <p>Probe elevation, slope, and hydrological features on demand.</p>
+        </header>
+        <div class="form-grid">
+          <label>
+            Latitude
+            <input id="ter-lat" type="number" step="0.0001" placeholder="35.6895" />
+          </label>
+          <label>
+            Longitude
+            <input id="ter-lon" type="number" step="0.0001" placeholder="139.6917" />
+          </label>
+        </div>
+        <div class="actions">
+          <button class="primary" id="ter-elev-btn">Elevation</button>
+          <button class="secondary" id="ter-slope-btn">Slope</button>
+          <button class="secondary" id="ter-rough-btn">Roughness</button>
+          <button class="secondary" id="ter-flow-btn">Flow Direction</button>
+          <button class="ghost" id="ter-sample">Load Sample</button>
+        </div>
+        <pre class="output" id="ter-output">Terrain metrics will be listed here.</pre>
+      </article>
+    </section>
+
+    <section class="status" id="status">
+      <div>
+        <h3>Operational Timeline</h3>
+        <p>Review recent outputs across modules. Use this space as a live briefing board.</p>
+      </div>
+      <div class="status-cards">
+        <div class="status-card">
+          <h4>Quick Tips</h4>
+          <ul>
+            <li>Run facility search before simulations to confirm site IDs.</li>
+            <li>Copy task IDs for asynchronous job results.</li>
+            <li>Use sample loaders to validate backend connectivity.</li>
+          </ul>
+        </div>
+        <div class="status-card">
+          <h4>Latency Expectations</h4>
+          <p>Chemical analysis and stability scans are asynchronous. Expect 20–45 seconds.</p>
+        </div>
+        <div class="status-card">
+          <h4>Need Help?</h4>
+          <p>Open the API docs to explore raw endpoints and schemas.</p>
+          <a class="link" href="/docs" target="_blank" rel="noreferrer">Open Swagger</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="support">
+    <div>
+      <strong>Agri-Logic Command Center</strong>
+      <p>Unified oversight for agriculture, environment, and industrial safety.</p>
+    </div>
+    <div>
+      <p>Questions? Reach the platform team at <a href="mailto:support@agri-logic.ai">support@agri-logic.ai</a>.</p>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
